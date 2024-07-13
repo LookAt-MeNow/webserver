@@ -67,8 +67,46 @@ bool ThreadPool<T>::append_task(T* task) {
     }
     task_queue.push(task); //添加任务
     m_locker.unlock();
-    m_sem.post(); //信号量加1
+    m_sem.signal(); //信号量加1
     return true;
 }
 
+//线程运行函数
+template<typename T>
+void ThreadPool<T>::run() {
+    while(!cease) { //如果线程不结束 --> cease == false
+        m_sem.wait(); //p操作，等待信号量,解决线程同步问题
+        m_locker.lock(); //加锁，解决任务队列的互斥问题
+        if(task_queue.empty()) {
+            m_locker.unlock();
+            continue; //如果任务队列为空，继续循环等待
+        }
+        T* task = task_queue.front(); //取出任务，也即队头
+        task_queue.pop(); // 队头出列
+        m_locker.unlock(); //解锁
+        if(!task) { //task == NULL,队列为空
+            continue; 
+        }
+        //处理逻辑
+        //...待处理
+    }
+}
+
+//工作函数
+template<typename T>
+void* ThreadPool<T>::worker(void* arg) {
+    ThreadPool* pool = (ThreadPool*)arg;
+    pool->run();
+    return pool;
+}
+
 #endif
+
+//1.为什么设置工作函数
+//答：工作函数是线程的入口函数，线程创建后会调用工作函数，工作函数会调用线程运行函数，线程运行函数会调用任务队列中的任务进行处理
+//为什么通过工作函数调用线程函数
+//答：工作函数是静态函数，可以通过pthread_create创建线程，线程创建后会调用工作函数，工作函数会调用线程运行函数，线程运行函数会调用任务队列中的任务进行处理
+//2.为什么设置工作函数void* worker(void* arg)为静态函数
+//答：静态函数不依赖于类的实例，可以通过pthread_create创建线程，线程创建后会调用工作函数，工作函数会调用线程运行函数，线程运行函数会调用任务队列中的任务进行处理
+//3.为什么设置线程处理函数和线程运行函数为私有
+//答：线程处理函数和线程运行函数是线程池的私有成员函数，只能在类内部调用，不允许外部调用

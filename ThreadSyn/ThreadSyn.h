@@ -29,7 +29,7 @@ class sem{
             return true;
         }
         //增加信号量 V操作
-        bool post(){
+        bool signal(){
             if(sem_post(&m_sem) != 0) { //增加信号量，若失败则返回false
                 return false;
             }

@@ -83,3 +83,68 @@ Proactor模式将所有I/O操作都交给主线程和内核来处理，工作线
 
 ## 线程池
 [实现地址](http://chenfeifei.online/2023/08/11/c-11-xian-cheng-chi/)
+
+## I/O多路复用技术
+
+名词解释：
+>文件描述符:相当于一个文件、设备等的标识，就好比排队取餐给你一个餐号，取到根据餐号就能判断是不是你的餐食，文件描述符就相当于餐号。
+
+>I/O复用:程序可以同时监控多个文件描述符,在传统的阻塞IO模型中，每个IO操作都需要一个独立的线程来处理，当有大量的IO操作时，会导致线程数量的增加，从而带来线程切换和上下文切换的开销。而多路复用通过使用一个线程来监听多个IO事件，避免了线程数量的增加，减少了线程切换和上下文切换的开销。
+
+>IO事件就绪通知：多路复用机制通过操作系统提供的系统调用（如select、poll、epoll等）来监听多个IO事件的就绪状态。当有任何一个IO事件就绪时，操作系统会通知应用程序，告知哪些IO事件已经准备好可以进行读取或写入操作。
+
+>非阻塞IO：多路复用机制通常与非阻塞IO配合使用。在非阻塞IO模型中，当一个IO操作无法立即完成时，不会阻塞线程，而是立即返回一个错误码或特定的状态，应用程序可以继续处理其他IO操作或其他任务，提高了系统的并发性能。
+
+>事件循环：多路复用机制通过事件循环来处理就绪的IO事件。事件循环会不断地监听IO事件的就绪状态，当有IO事件就绪时，会调用相应的回调函数来处理该事件。通过事件循环的方式，可以高效地处理多个IO操作。
+
+**三种复用方式**
+|select|poll|epoll|
+|--|--|--|
+|将想要监控的文件描述符给它并复制到内核中,所以会限制大小,同时当select返回后我们仅仅能知道有些文件描述符可以读写了，但是我们不知道是哪一个,需要进程再次遍历找到|解决了select限制大小的问题|引入epoll_ctl很体贴的做到了只操作那些有变化的文件描述符，而不是全部拷贝,并且与内核共享内存,记录改变的文件描述符通知进程，不需要进程自己寻找|
+
+**两种触发方式**
+边缘触发(ET)：当被监控的 Socket 描述符上有可读事件发生时，服务器端只会从 epoll_wait 中苏醒一次
+水平触发(LT)：当被监控的 Socket 上有可读事件发生时，服务器端不断地从 epoll_wait 中苏醒，直到内核缓冲区数据被 read 函数读完才结束
+ET:快递站只发一次消息让你取快递，无论你取不取
+LT:快递站点只要你不取快递就一直通知你，直到取为止
+*边缘触发模式一般和非阻塞 I/O 搭配使用*，select/poll 只有水平触发模式，epoll 默认的触发模式是水平触发，但可以设置为边缘触发
+一般情况下 边缘触发>水平触发(不断系统调用，增加上下文切换开销)
+
+epollAPI：
+
+- epoll_create
+  - int epoll_create(int size)
+  - 创建一个指示epoll内核事件表的文件描述符，改描述符将作为其他epoll系统调的第一个参数
+- epoll_ctl
+  - 用于操作内核事件表监控的文件描述符上的事件：注册、修改、删除
+  - 参数
+    - int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
+    - epfd：为epoll_creat的句柄
+    - op：表示动作，用3个宏来表示：
+      - EPOLL_CTL_ADD (注册新的fd到epfd)，
+      - EPOLL_CTL_MOD (修改已经注册的fd的监听事件)，
+      - EPOLL_CTL_DEL (从epfd删除一个fd)；
+    - event：告诉内核需要监听的事件
+      event是epoll_event结构体指针类型，表示内核所监听的事件
+      ```c++
+        struct epoll_event {
+          _uint32_t events; /* Epoll events */
+          epoll_data_t data; /* User data variable */
+        };
+      ```
+- epoll_wait
+  - int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
+  - 用于等待所监控文件描述符上有事件的产生，返回就绪的文件描述符个数
+  - 参数
+    - events：用来存内核得到事件的集合，
+    - maxevents：告之内核这个events有多大，这个maxevents的值不能大于创建epoll_create()时的size，
+    - timeout：是超时时间
+      - -1：阻塞
+      - 0：立即返回，非阻塞
+      - \>0：指定毫秒
+  - 返回值：成功返回有多少文件描述符就绪，时间到时返回0，出错返回-1
+----
+reference:
+[epollAPI](https://mp.weixin.qq.com/s/BfnNl-3jc_x5WPrWEJGdzQ)
+[多路复用](https://blog.csdn.net/m0_60259116/article/details/137118746)
+[触发方式](https://xiaolincoding.com/os/8_network_system/selete_poll_epoll.html#epoll)
