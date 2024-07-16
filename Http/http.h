@@ -5,6 +5,7 @@
 #include <string>
 #include <sys/stat.h>
 #include <sys/epoll.h>
+#include <string.h>
 class http_con{
     public:
         // m_eopllfd是所有socket上的事件都注册到一个epoll内核事件表中，所以将m_epollfd设置为静态的
@@ -29,11 +30,11 @@ class http_con{
         enum HTTP_CODE{
             GET_REQUEST, // 获得了一个完整的客户请求
             NO_REQUEST, // 请求不完整，需要继续读取客户数据
+            INTERNAL_ERROR, // 服务器内部错误
             FILE_REQUEST, // 文件请求
             BAD_REQUEST, // 客户请求有语法错误
             NO_RESOURCE, // 没有资源
             FORBIDDEN_REQUEST, // 客户对资源没有足够的访问权限
-            INTERNAL_ERROR, // 服务器内部错误
             CLOSED_CONNECTION // 客户端已经关闭连接
         };
         
@@ -41,13 +42,13 @@ class http_con{
         enum CHECK_STATE{
             CHECK_STATE_REQUSETLINE, // 请求行
             CHECK_STATE_HEADER, // 请求头
-            CHEXK_STATE_CONTENT // 请求内容
+            CHEXK_STATE_CONTENT // 解析消息体，用于解析POST请求
         };
         // 从状态机状态
         enum LINE_STATE{
             LINE_OK, // 读取到一个完整的行
-            LINE_BAD,
-            LINE_OPEN  
+            LINE_BAD, // 行出错
+            LINE_OPEN // 行数据尚且不完整
         };
         //--------
         //LINE_OK----(新的客户数据到达)---->LINE_OPEN
@@ -76,7 +77,7 @@ class http_con{
         //...数据库
 
     private:
-        // 初始化连接
+        // 初始化连接数据
         void init();
         // 从缓存中读取并处理请求
         HTTP_CODE process_read();
@@ -91,7 +92,9 @@ class http_con{
         // 响应报文
         HTTP_CODE do_request();
         // 继续读取请求
-        char* get_line();
+        char* get_line() { //
+            return m_read_buf+m_start_line; //返回当前正在解析的行的起始位置 
+        }
 
         // 从状态机解析一行，判断是请求行，请求头还是请求内容
         LINE_STATE parse_line();
@@ -120,8 +123,9 @@ class http_con{
         sockaddr_in m_address; // 该http连接的地址
         char m_read_buf[READ_BUFFER_SIZE]; // 读缓冲区
         int m_read_idx; // 标记读缓冲区中已经读入的客户数据的最后一个字节的下一个位置
-        int m_checked_idx; // 当前正在分析的字符在读缓冲区中的位置
-        int m_start_line; // 当前正在解析的行的起始位置
+        
+        int m_checked_idx; // 从状态机当前正在分析的字符在读缓冲区中的位置
+        int m_start_line; // 每一个数据行在buf中的起始位置
 
         char m_write_buf[WRITE_BUFFER_SIZE]; // 写缓冲区
         int m_write_idx; // 写缓冲区中待发送的字节数
