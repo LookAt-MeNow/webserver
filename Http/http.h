@@ -6,6 +6,11 @@
 #include <sys/stat.h>
 #include <sys/epoll.h>
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <cstdarg>
+#include <sys/uio.h>
 class http_con{
     public:
         // m_eopllfd是所有socket上的事件都注册到一个epoll内核事件表中，所以将m_epollfd设置为静态的
@@ -110,10 +115,10 @@ class http_con{
         bool add_content(const std::string& content);
         // 4.响应类型
         bool add_content_type();
-        // 5.响应长度
-        bool add_content_length(int content_length);
-        // 6.响应状态
+        // 5.响应状态
         bool add_state_line(int state,const std::string& title);
+        // 6.响应长度
+        bool add_content_length(int content_length);
         // 7.响应连接状态
         bool add_linger();
         // 8.响应空行
